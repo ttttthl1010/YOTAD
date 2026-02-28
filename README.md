@@ -29,7 +29,7 @@ python ../ultralytics/detect/train.py
 ### (iii) TAD Predicting
 given the well trained TAD model file model.pt, run:
 ```
-python pre.py 
+python ../ultralytics/detect/pre.py 
 ```
 
 **Output:**
