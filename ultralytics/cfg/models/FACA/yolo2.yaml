@@ -1,0 +1,52 @@
+# 文件名：yolov8-faca-tad-det-2heads-scales.yaml
+# 如为灰度图可加 ch: 1；RGB 默认 3 通道可不写
+# ch: 3
+
+nc: 1
+names: [tad]
+
+# ✅ 兼容 Ultralytics 的复合缩放写法：通过 `model=... scale=s/m/l/x` 选择深度/宽度
+scales:  # [depth_multiple, width_multiple, max_channels]
+  n: [0.33, 0.25, 1024]
+  s: [0.33, 0.50, 1024]
+  m: [0.67, 0.75, 768]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.25, 512]
+
+# 注意：FACA 采用精简签名 (c1, c2, heads, reduction, mode, use_multi_scale)
+# YAML 中仅写 [c2, heads, reduction, mode, use_multi_scale]
+
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]]          # 0
+  - [-1, 1, Conv, [128, 3, 2]]         # 1
+  - [-1, 3, C2f, [128, True]]          # 2
+
+  - [-1, 1, Conv, [256, 3, 2]]         # 3  P3/8
+  - [-1, 6, C2f, [256, True]]          # 4
+  # （P3 不放 FACA）
+
+  - [-1, 1, Conv, [512, 3, 2]]         # 5  P4/16
+  - [-1, 3, C2f, [512, True]]          # 6
+  - [-1, 1, FACA, [512, 8, 4, 3, True]]    # 7  FACA(c1,c2,heads,reduction,mode,ms)
+
+  - [-1, 1, Conv, [1024, 3, 2]]        # 8  P5/32
+  - [-1, 3, C2f, [1024, True]]         # 9
+  - [-1, 1, SPPF, [1024, 5]]           # 10
+  - [-1, 1, FACA, [1024, 8, 4, 3, True]]   # 11
+
+head:
+  # 上采样到 P4 路径
+  - [-1, 1, Conv, [512, 1, 1]]                       # 12
+  - [-1, 1, nn.Upsample, [None, 2, 'nearest']]       # 13  使用 PyTorch 原生 Upsample
+  - [[-1, 6], 1, Concat, [1]]                        # 14  与 P4 主干(6)拼
+  - [-1, 3, C2f, [512, False]]                       # 15
+  - [-1, 1, FACA, [512, 8, 4, 3, True]]              # 16
+
+  # 下采样回 P5 路径
+  - [-1, 1, Conv, [512, 3, 2]]                       # 17
+  - [[-1, 11], 1, Concat, [1]]                       # 18  与 P5 主干(11)拼
+  - [-1, 3, C2f, [1024, False]]                      # 19
+  # 不再叠 FACA，避免重复
+
+  # Detect 两头（P4, P5）
+  - [[16, 19], 1, Detect, [nc]]                      # 20
